@@ -137,6 +137,10 @@ export class SemanticHighlightingFeature implements StaticFeature {
         return 'LocalVariable';
       case 'variable.parameter.cpp':
         return 'Parameter';
+      // MOD BEGIN
+      case 'variable.other.constexpr.cpp':
+        return 'ConstexprVariable';
+      // MOD END
       case 'variable.other.field.cpp':
         return 'Field';
       case 'variable.other.field.static.cpp':
@@ -157,6 +161,10 @@ export class SemanticHighlightingFeature implements StaticFeature {
         return 'Namespace';
       case 'entity.name.type.template.cpp':
         return 'TemplateParameter';
+      // MOD BEGIN
+      case 'entity.name.nontype.template.cpp':
+        return 'NonTypeTemplateParameter';
+      // MOD END
       case 'entity.name.type.concept.cpp':
         return 'Concept';
       case 'storage.type.primitive.cpp':
