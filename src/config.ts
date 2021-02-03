@@ -18,6 +18,10 @@ export class Config {
     return this.cfg.get('disableSnippetCompletion') as boolean;
   }
 
+  get disableCompletion() {
+    return this.cfg.get('disableCompletion') as boolean;
+  }
+
   get arguments() {
     return this.cfg.get<string[]>('arguments', []);
   }
@@ -40,5 +44,9 @@ export class Config {
 
   get compilationDatabasePath() {
     return this.cfg.get<string>('compilationDatabasePath');
+  }
+
+  get serverCompletionRanking() {
+    return this.cfg.get('serverCompletionRanking') as boolean;
   }
 }

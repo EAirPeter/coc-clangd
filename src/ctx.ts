@@ -1,15 +1,16 @@
-import { Executable, ExtensionContext, LanguageClient, LanguageClientOptions, ServerOptions, services, StaticFeature, workspace } from 'coc.nvim';
-import { Disposable, TextDocumentClientCapabilities } from 'vscode-languageserver-protocol';
+import { Disposable, Executable, ExtensionContext, LanguageClient, LanguageClientOptions, Range, ServerOptions, services, StaticFeature, window, workspace } from 'coc.nvim';
 import { Config } from './config';
 import { SemanticHighlightingFeature } from './semantic-highlighting';
 
 class ClangdExtensionFeature implements StaticFeature {
   constructor() {}
+  dispose(): void {}
   initialize() {}
   fillClientCapabilities(capabilities: any) {
-    const textDocument = capabilities.textDocument as TextDocumentClientCapabilities;
-    // @ts-ignore: clangd extension
-    textDocument.completion?.editsNearCursor = true;
+    const extendedCompletionCapabilities = capabilities.textDocument.completion;
+    if (extendedCompletionCapabilities) {
+      extendedCompletionCapabilities.editsNearCursor = true;
+    }
   }
 }
 
@@ -21,7 +22,7 @@ export class Ctx {
     this.config = new Config();
   }
 
-  async startServer(bin: string) {
+  async startServer(bin: string, ...features: StaticFeature[]) {
     const old = this.client;
     if (old) {
       await old.stop();
@@ -36,7 +37,7 @@ export class Ctx {
     }
 
     const serverOptions: ServerOptions = exec;
-    const outputChannel = workspace.createOutputChannel('clangd');
+    const outputChannel = window.createOutputChannel('clangd');
 
     const initializationOptions: any = { clangdFileStatus: true, fallbackFlags: this.config.fallbackFlags };
     if (this.config.compilationDatabasePath) {
@@ -56,8 +57,8 @@ export class Ctx {
       ],
       initializationOptions,
       disableDiagnostics: this.config.disableDiagnostics,
-      // @ts-ignore
       disableSnippetCompletion: this.config.disableSnippetCompletion,
+      disableCompletion: this.config.disableCompletion,
       outputChannel,
       middleware: {
         provideOnTypeFormattingEdits: (document, position, ch, options, token, next) => {
@@ -65,15 +66,33 @@ export class Ctx {
           if (ch === '\n') ch = '';
           return next(document, position, ch, options, token);
         },
+        provideCompletionItem: async (document, position, context, token, next) => {
+          const list = await next(document, position, context, token);
+          if (!list) return [];
+          if (!this.config.serverCompletionRanking) return list;
+
+          const items = (Array.isArray(list) ? list : list.items).map((item) => {
+            const start = item.textEdit?.range.start;
+            if (start) {
+              const prefix = document.getText(Range.create(start, position));
+              if (prefix) item.filterText = prefix + '_' + item.filterText;
+            }
+            return item;
+          });
+
+          return { items, isIncomplete: true };
+        },
         provideWorkspaceSymbols: async (query, token, next) => {
           const symbols = await next(query, token);
           if (!symbols) return;
 
           return symbols.map((symbol) => {
-            if (symbol.containerName) {
-              symbol.name = `${symbol.containerName}::${symbol.name}`;
+            if (query.includes('::')) {
+              if (symbol.containerName) {
+                symbol.name = `${symbol.containerName}::${symbol.name}`;
+              }
+              symbol.containerName = '';
             }
-            symbol.containerName = '';
             return symbol;
           });
         },
@@ -88,6 +107,7 @@ export class Ctx {
         client.registerFeature(new SemanticHighlightingFeature(client, this.context));
       }
     }
+    for (const feature of features) client.registerFeature(feature);
     this.context.subscriptions.push(services.registLanguageClient(client));
     await client.onReady();
 
